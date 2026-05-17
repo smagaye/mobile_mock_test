@@ -28,11 +28,10 @@ jobs:
           distribution: 'temurin'
 
       # ── 3. Flutter ──────────────────────────
-      # ⚠️ Remplace par ta version exacte : flutter --version
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.1'   # ← ta version exacte ici
+          flutter-version: '3.19.0'
           channel: stable
           cache: true                  # cache Flutter entre les runs
 
