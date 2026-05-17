@@ -111,23 +111,29 @@ echo "==== Maestro hierarchy check ===="
 $MAESTRO hierarchy
 
 # ── 7. Create output directories ──────────────────────────
-mkdir -p "$VIDEOS_DIR" "$SCREENSHOTS_DIR"
+mkdir -p "$SCREENSHOTS_DIR"
+[ "$RECORD_VIDEOS" = "true" ] && mkdir -p "$VIDEOS_DIR"
 
-# ── 8. Record a video for each flow ───────────────────────
-echo "==== Recording videos ===="
-for FLOW in "$FLOWS_DIR"/*.yaml; do
-  FLOW_NAME=$(basename "$FLOW" .yaml)
-  echo "  Recording: $FLOW_NAME..."
-  $MAESTRO record --local \
-    -e TEST_EMAIL="$TEST_EMAIL" \
-    -e TEST_PASSWORD="$TEST_PASSWORD" \
-    "$FLOW" \
-    "$VIDEOS_DIR/${FLOW_NAME}.mp4" \
-    || echo "  WARNING: $FLOW_NAME recording failed — continuing"
-done
-echo "Videos recorded ✓"
+# ── 8. Record a video for each flow (optional) ────────────
+if [ "$RECORD_VIDEOS" = "true" ]; then
+  echo "==== Recording videos (RECORD_VIDEOS=true) ===="
+  for FLOW in "$FLOWS_DIR"/*.yaml; do
+    FLOW_NAME=$(basename "$FLOW" .yaml)
+    echo "  Recording: $FLOW_NAME..."
+    $MAESTRO record --local \
+      -e TEST_EMAIL="$TEST_EMAIL" \
+      -e TEST_PASSWORD="$TEST_PASSWORD" \
+      "$FLOW" \
+      "$VIDEOS_DIR/${FLOW_NAME}.mp4" \
+      || echo "  WARNING: $FLOW_NAME recording failed — continuing"
+  done
+  echo "Videos recorded ✓"
+else
+  echo "==== Video recording disabled (RECORD_VIDEOS=false) ===="
+fi
 
-# ── 9. Run all tests + HTML report ────────────────────────
+# ── 9. Run all tests + screenshots + HTML report ──────────
+# Screenshots are always enabled
 echo "==== Running all tests ===="
 $MAESTRO test "$FLOWS_DIR/" \
   -e TEST_EMAIL="$TEST_EMAIL" \
