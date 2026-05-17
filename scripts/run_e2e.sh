@@ -103,7 +103,8 @@ adb install -r "$APK_PATH"
 echo "APK installed ✓"
 
 # Launch the app
-adb shell monkey -p "$APP_PACKAGE" --pct-syskeys 0 1
+# use am start — monkey triggers Pixel Launcher ANR
+adb shell am start -n "$APP_PACKAGE/$APP_PACKAGE.MainActivity"
 sleep 5
 
 # ── 6. Verify Maestro can see the app ─────────────────────
@@ -134,12 +135,13 @@ fi
 
 # ── 9. Run all tests + screenshots + HTML report ──────────
 # Screenshots are always enabled
+# html-detailed includes all steps, not just failures
 echo "==== Running all tests ===="
 $MAESTRO test "$FLOWS_DIR/" \
   -e TEST_EMAIL="$TEST_EMAIL" \
   -e TEST_PASSWORD="$TEST_PASSWORD" \
-  --format html \
-  --output "$REPORT_FILE" \
+  --format html-detailed \
+  --output "$SCREENSHOTS_DIR/report.html" \
   --test-output-dir "$SCREENSHOTS_DIR"
 
 echo "==== All tests completed ✓ ===="
