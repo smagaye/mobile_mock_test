@@ -9,8 +9,9 @@ env:
 ---
 
 # Lancer l'app proprement
+- stopApp
 - launchApp
-- waitForAnimationToEnd
+- clearState
 
 # Vérifier qu'on est sur le login
 - assertVisible:

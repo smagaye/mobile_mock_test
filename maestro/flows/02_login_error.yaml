@@ -5,7 +5,10 @@
 appId: com.example.account_manager
 ---
 
+# Lancer l'app proprement
+- stopApp
 - launchApp
+- clearState
 - waitForAnimationToEnd
 
 - assertVisible:
