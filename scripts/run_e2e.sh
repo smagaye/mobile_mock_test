@@ -93,19 +93,10 @@ $MAESTRO hierarchy
 echo "════ Lancement des tests ════"
 mkdir -p results/videos results/screenshots
 
-# Vidéo flow complet
-$MAESTRO record --local \
-  --output results/videos/full_flow.mp4 \
-  maestro/flows/06_full_flow.yaml \
-  -e TEST_EMAIL="$TEST_EMAIL" \
-  -e TEST_PASSWORD="$TEST_PASSWORD"
-
 # Tous les tests + rapport HTML
-$MAESTRO test maestro/flows/ \
-  -e TEST_EMAIL="$TEST_EMAIL" \
-  -e TEST_PASSWORD="$TEST_PASSWORD" \
-  --format html \
-  --output results/rapport.html \
-  --test-output-dir results/screenshots
+$MAESTRO  test maestro/flows/ -e TEST_EMAIL=$TEST_EMAIL -e TEST_PASSWORD=$TEST_PASSWORD --test-output-dir results/screenshots
+
+# Vidéo flow complet
+$MAESTRO record maestro/flows/ --local --output results/videos/ -e TEST_EMAIL=$TEST_EMAIL -e TEST_PASSWORD="$TEST_PASSWORD
 
 echo "════ Tests terminés ✓ ════"
