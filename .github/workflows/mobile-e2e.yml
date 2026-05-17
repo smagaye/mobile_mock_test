@@ -17,14 +17,23 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. Java ─────────────────────────────
+      # ── 2. KVM — CRUCIAL pour les perfs émulateur
+      # Sans ça l'émulateur tourne en software → trop lent → offline
+      - name: Enable KVM hardware acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
+            | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      # ── 3. Java ─────────────────────────────
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      # ── 3. Flutter ──────────────────────────
+      # ── 4. Flutter ──────────────────────────
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -32,7 +41,7 @@ jobs:
           channel: stable
           cache: true
 
-      # ── 4. Cache AVD ────────────────────────
+      # ── 5. Cache AVD ────────────────────────
       - name: Cache Android AVD
         uses: actions/cache@v4
         with:
@@ -42,14 +51,14 @@ jobs:
             /usr/local/lib/android/sdk/system-images
           key: avd-api33-${{ runner.os }}-x86_64-v1
 
-      # ── 5. Cache Maestro ────────────────────
+      # ── 6. Cache Maestro ────────────────────
       - name: Cache Maestro
         uses: actions/cache@v4
         with:
           path: ~/.maestro
           key: maestro-1.40.0
 
-      # ── 6. Installer Maestro ────────────────
+      # ── 7. Installer Maestro ────────────────
       - name: Install Maestro
         run: |
           if ! command -v maestro &> /dev/null; then
@@ -58,11 +67,11 @@ jobs:
           fi
           echo "$HOME/.maestro/bin" >> $GITHUB_PATH
 
-      # ── 7. Dependencies ─────────────────────
+      # ── 8. Dependencies ─────────────────────
       - name: Flutter pub get
         run: flutter pub get
 
-      # ── 8. Fix AGP compileSdk 35 ────────────
+      # ── 9. Fix AGP compileSdk 35 ────────────
       - name: Fix Android Gradle Plugin version
         run: |
           sed -i \
@@ -73,17 +82,17 @@ jobs:
             android/gradle/wrapper/gradle-wrapper.properties
           echo "AGP fix ✓"
 
-      # ── 9. Build APK ────────────────────────
+      # ── 10. Build APK ───────────────────────
       - name: Build APK
         run: flutter build apk --debug
 
-      # ── 10. Vérifier l'APK ──────────────────
+      # ── 11. Vérifier APK ────────────────────
       - name: Check APK
         run: |
           ls -lh build/app/outputs/flutter-apk/app-debug.apk
           echo "APK OK ✓"
 
-      # ── 11. Émulateur + Tests ───────────────
+      # ── 12. Émulateur + Tests ───────────────
       - name: Run E2E Tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -96,76 +105,65 @@ jobs:
           cores: 2
           ram-size: 4096M
           heap-size: 512M
+          # KVM activé → hardware acceleration → émulateur rapide
           emulator-options: >
             -no-window
             -no-audio
             -no-boot-anim
-            -gpu swiftshader_indirect
             -no-snapshot-save
+            -gpu swiftshader_indirect
+            -accel on
           disable-animations: true
 
           script: |
             set -e
 
             echo "════════════════════════════════"
-            echo "  Fix device offline"
+            echo "  Device status"
             echo "════════════════════════════════"
 
-            # Redémarrer le serveur adb proprement
-            # Règle le "device offline" dès le départ
-            adb kill-server
-            sleep 2
-            adb start-server
-            sleep 3
+            # Vérifier l'état du device
+            adb devices -l
 
-            echo "════════════════════════════════"
-            echo "  Attente device online"
-            echo "════════════════════════════════"
+            # Redémarrer adb proprement
+            adb kill-server && sleep 2 && adb start-server && sleep 3
 
-            # Attendre que le device passe de offline → online
-            # adb wait-for-device seul ne suffit pas (reste offline)
+            # Attendre que le device soit vraiment online (pas juste détecté)
+            echo "Attente device online..."
             TIMEOUT=120
             ELAPSED=0
-            until adb devices | grep -w "device" | grep -v "List" | grep -v "offline"; do
+            until adb devices | grep "emulator" | grep -w "device" | grep -v "offline"; do
               if [ $ELAPSED -ge $TIMEOUT ]; then
-                echo "Timeout — device toujours offline après ${TIMEOUT}s"
+                echo "❌ Timeout device offline (${TIMEOUT}s)"
                 adb devices
                 exit 1
               fi
-              echo "  Device offline, attente... (${ELAPSED}s)"
               sleep 3
               ELAPSED=$((ELAPSED + 3))
+              echo "  ${ELAPSED}s..."
             done
 
             echo "Device online ✓"
-            adb devices
 
             echo "════════════════════════════════"
             echo "  Attente boot complet"
             echo "════════════════════════════════"
 
-            # Attendre sys.boot_completed maintenant que le device est online
             TIMEOUT=180
             ELAPSED=0
-            until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
+            until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')" = "1" ]; do
               if [ $ELAPSED -ge $TIMEOUT ]; then
-                echo "Timeout — boot pas terminé après ${TIMEOUT}s"
+                echo "❌ Timeout boot (${TIMEOUT}s)"
                 exit 1
               fi
-              echo "  Boot en cours... (${ELAPSED}s)"
               sleep 5
               ELAPSED=$((ELAPSED + 5))
-            done
-
-            # Attendre la fin des animations de démarrage
-            until [ "$(adb shell getprop init.svc.bootanim 2>/dev/null | tr -d '\r')" = "stopped" ]; do
-              echo "  Animations en cours..."
-              sleep 2
+              echo "  Boot en cours... ${ELAPSED}s"
             done
 
             echo "Boot complet ✓"
 
-            # Désactiver animations — fix screenshot error -1
+            # Désactiver animations
             adb shell settings put global window_animation_scale 0
             adb shell settings put global transition_animation_scale 0
             adb shell settings put global animator_duration_scale 0
@@ -211,7 +209,7 @@ jobs:
 
             echo "Tests terminés ✓"
 
-      # ── 12. Upload artefacts ─────────────────
+      # ── 13. Upload artefacts ─────────────────
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
