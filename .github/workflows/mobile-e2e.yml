@@ -16,6 +16,7 @@ env:
   # Maestro
   MAESTRO_VERSION: '2.5.1'
   MAESTRO: maestro
+  RECORD_VIDEOS: false
 
   # Android emulator
   ANDROID_API_LEVEL: '33'
@@ -157,6 +158,7 @@ jobs:
           VIDEOS_DIR: ${{ env.VIDEOS_DIR }}
           SCREENSHOTS_DIR: ${{ env.SCREENSHOTS_DIR }}
           REPORT_FILE: ${{ env.REPORT_FILE }}
+          RECORD_VIDEOS: ${{ env.RECORD_VIDEOS }}
         with:
           api-level: ${{ env.ANDROID_API_LEVEL }}
           arch: ${{ env.ANDROID_ARCH }}
