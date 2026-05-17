@@ -16,7 +16,18 @@
 # ─────────────────────────────────────────────────────────────
 set -e
 
+# Ensure Maestro is in PATH regardless of how the script is called
+export PATH="$PATH:$HOME/.maestro/bin"
 MAESTRO="$HOME/.maestro/bin/maestro"
+
+# Verify Maestro is available
+if [ ! -f "$MAESTRO" ]; then
+  echo "ERROR: Maestro not found at $MAESTRO"
+  echo "Installed binaries:"
+  ls "$HOME/.maestro/bin/" 2>/dev/null || echo "  ~/.maestro/bin not found"
+  exit 1
+fi
+echo "Maestro version: $($MAESTRO --version)"
 
 # ── 1. Fix device offline ──────────────────────────────────
 echo "==== Fix device offline ===="
