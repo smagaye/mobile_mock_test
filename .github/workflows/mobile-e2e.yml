@@ -15,6 +15,7 @@ env:
 
   # Maestro
   MAESTRO_VERSION: '2.5.1'
+  MAESTRO: maestro
 
   # Android emulator
   ANDROID_API_LEVEL: '33'
@@ -89,22 +90,33 @@ jobs:
           key: avd-api${{ env.ANDROID_API_LEVEL }}-${{ runner.os }}-${{ env.ANDROID_ARCH }}-v1
 
       # ── 6. Cache Maestro ────────────────────
-      - name: Cache Maestro ${{ env.MAESTRO_VERSION }}
+      - name: Cache Maestro
         uses: actions/cache@v4
         with:
           path: ~/.maestro
-          key: maestro-${{ env.MAESTRO_VERSION }}-${{ runner.os }}
+          key: maestro-${{ runner.os }}
 
       # ── 7. Install Maestro ──────────────────
       - name: Install Maestro ${{ env.MAESTRO_VERSION }}
         run: |
-          if ! command -v maestro &> /dev/null; then
-            curl -Ls "https://get.maestro.mobile.dev" \
-              | MAESTRO_VERSION=${{ env.MAESTRO_VERSION }} bash
+          MAESTRO_BIN="$HOME/.maestro/bin/maestro"
+      
+          # Install only if not already cached
+          if [ ! -f "$MAESTRO_BIN" ]; then
+            export MAESTRO_VERSION=${{ env.MAESTRO_VERSION }}
+            curl -Ls "https://get.maestro.mobile.dev" | bash
           fi
+      
+          # Always add to PATH — cache or fresh install
           echo "$HOME/.maestro/bin" >> $GITHUB_PATH
-          maestro --version
-
+      
+          # Read installed version dynamically
+          INSTALLED_VERSION=$($MAESTRO_BIN --version 2>&1 \
+            | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+      
+          echo "Maestro installed: $INSTALLED_VERSION"
+          echo "MAESTRO_INSTALLED_VERSION=$INSTALLED_VERSION" >> $GITHUB_ENV
+          
       # ── 8. Flutter dependencies ─────────────
       - name: Flutter pub get
         run: flutter pub get
