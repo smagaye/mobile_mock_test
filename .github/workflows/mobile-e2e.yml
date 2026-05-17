@@ -17,9 +17,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. KVM — CRUCIAL pour les perfs émulateur
-      # Sans ça l'émulateur tourne en software → trop lent → offline
-      - name: Enable KVM hardware acceleration
+      # ── 2. KVM ──────────────────────────────
+      # Sans KVM l'émulateur est trop lent → device offline
+      - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
             | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -37,7 +37,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0'
+          flutter-version: '3.27.1'   # ← flutter --version sur ta machine
           channel: stable
           cache: true
 
@@ -72,7 +72,7 @@ jobs:
         run: flutter pub get
 
       # ── 9. Fix AGP compileSdk 35 ────────────
-      - name: Fix Android Gradle Plugin version
+      - name: Fix Android Gradle Plugin
         run: |
           sed -i \
             "s/com.android.tools.build:gradle:[0-9.]*/com.android.tools.build:gradle:8.3.0/" \
@@ -80,7 +80,6 @@ jobs:
           sed -i \
             "s|gradle-[0-9.]*-bin.zip|gradle-8.4-bin.zip|" \
             android/gradle/wrapper/gradle-wrapper.properties
-          echo "AGP fix ✓"
 
       # ── 10. Build APK ───────────────────────
       - name: Build APK
@@ -88,13 +87,16 @@ jobs:
 
       # ── 11. Vérifier APK ────────────────────
       - name: Check APK
-        run: |
-          ls -lh build/app/outputs/flutter-apk/app-debug.apk
-          echo "APK OK ✓"
+        run: ls -lh build/app/outputs/flutter-apk/app-debug.apk
 
       # ── 12. Émulateur + Tests ───────────────
+      # Le script est dans un fichier .sh — évite les
+      # erreurs de parsing multilignes avec /usr/bin/sh
       - name: Run E2E Tests
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
+          TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
         with:
           api-level: 33
           arch: x86_64
@@ -105,7 +107,6 @@ jobs:
           cores: 2
           ram-size: 4096M
           heap-size: 512M
-          # KVM activé → hardware acceleration → émulateur rapide
           emulator-options: >
             -no-window
             -no-audio
@@ -114,100 +115,7 @@ jobs:
             -gpu swiftshader_indirect
             -accel on
           disable-animations: true
-
-          script: |
-            set -e
-
-            echo "════════════════════════════════"
-            echo "  Device status"
-            echo "════════════════════════════════"
-
-            # Vérifier l'état du device
-            adb devices -l
-
-            # Redémarrer adb proprement
-            adb kill-server && sleep 2 && adb start-server && sleep 3
-
-            # Attendre que le device soit vraiment online (pas juste détecté)
-            echo "Attente device online..."
-            TIMEOUT=120
-            ELAPSED=0
-            until adb devices | grep "emulator" | grep -w "device" | grep -v "offline"; do
-              if [ $ELAPSED -ge $TIMEOUT ]; then
-                echo "❌ Timeout device offline (${TIMEOUT}s)"
-                adb devices
-                exit 1
-              fi
-              sleep 3
-              ELAPSED=$((ELAPSED + 3))
-              echo "  ${ELAPSED}s..."
-            done
-
-            echo "Device online ✓"
-
-            echo "════════════════════════════════"
-            echo "  Attente boot complet"
-            echo "════════════════════════════════"
-
-            TIMEOUT=180
-            ELAPSED=0
-            until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r\n')" = "1" ]; do
-              if [ $ELAPSED -ge $TIMEOUT ]; then
-                echo "❌ Timeout boot (${TIMEOUT}s)"
-                exit 1
-              fi
-              sleep 5
-              ELAPSED=$((ELAPSED + 5))
-              echo "  Boot en cours... ${ELAPSED}s"
-            done
-
-            echo "Boot complet ✓"
-
-            # Désactiver animations
-            adb shell settings put global window_animation_scale 0
-            adb shell settings put global transition_animation_scale 0
-            adb shell settings put global animator_duration_scale 0
-
-            # GPU renderer init
-            sleep 10
-
-            echo "════════════════════════════════"
-            echo "  Installation APK"
-            echo "════════════════════════════════"
-
-            adb install -r build/app/outputs/flutter-apk/app-debug.apk
-            echo "APK installé ✓"
-
-            adb shell monkey \
-              -p com.example.account_manager \
-              --pct-syskeys 0 1
-            sleep 5
-
-            echo "════════════════════════════════"
-            echo "  Vérification Maestro"
-            echo "════════════════════════════════"
-            ~/.maestro/bin/maestro hierarchy
-
-            echo "════════════════════════════════"
-            echo "  Lancement des tests"
-            echo "════════════════════════════════"
-
-            mkdir -p results/videos results/screenshots
-
-            ~/.maestro/bin/maestro record --local \
-              --output results/videos/full_flow.mp4 \
-              maestro/flows/ \
-              -e TEST_EMAIL="${{ secrets.TEST_EMAIL }}" \
-              -e TEST_PASSWORD="${{ secrets.TEST_PASSWORD }}"
-
-            ~/.maestro/bin/maestro test maestro/flows/ \
-              -e TEST_EMAIL="${{ secrets.TEST_EMAIL }}" \
-              -e TEST_PASSWORD="${{ secrets.TEST_PASSWORD }}" \
-              --format html \
-              --output results/rapport.html \
-              --test-output-dir results/screenshots
-
-            echo "Tests terminés ✓"
+          script: bash scripts/run_e2e.sh
 
       # ── 13. Upload artefacts ─────────────────
       - name: Upload test results
