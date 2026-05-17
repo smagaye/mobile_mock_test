@@ -1,0 +1,71 @@
+# ─────────────────────────────────────────────────────────────
+# 05_delete_account.yaml
+# Scénario : supprimer un compte + annuler une suppression
+# ─────────────────────────────────────────────────────────────
+appId: com.example.account_manager
+env:
+  EMAIL: ${TEST_EMAIL}
+  PASSWORD: ${TEST_PASSWORD}
+---
+
+- launchApp
+- waitForAnimationToEnd
+
+# ── 1. Login ──────────────────────────────────────────────────
+- tapOn:
+    id: "email_field"
+- inputText: ${EMAIL}
+- tapOn:
+    id: "password_field"
+- inputText: ${PASSWORD}
+- tapOn:
+    id: "login_button"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "accounts_list"
+
+# ── 2. Vérifier que Claire est présente avant suppression ─────
+- assertVisible:
+    text: "Claire Bernard"
+- assertVisible:
+    id: "delete_button_acc_3"
+
+# ── 3. Tester l'annulation de suppression ────────────────────
+- tapOn:
+    id: "delete_button_acc_3"
+- waitForAnimationToEnd
+
+# La dialog de confirmation doit apparaître
+- assertVisible:
+    id: "delete_confirm_button"
+- assertVisible:
+    id: "delete_cancel_button"
+
+# Annuler — Claire doit toujours être là
+- tapOn:
+    id: "delete_cancel_button"
+- waitForAnimationToEnd
+- assertVisible:
+    text: "Claire Bernard"
+
+# ── 4. Confirmer la suppression ───────────────────────────────
+- tapOn:
+    id: "delete_button_acc_3"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "delete_confirm_button"
+- tapOn:
+    id: "delete_confirm_button"
+- waitForAnimationToEnd
+
+# Vérifier que Claire a bien disparu de la liste
+- assertNotVisible:
+    text: "Claire Bernard"
+- assertNotVisible:
+    id: "account_item_acc_3"
+
+# Les autres comptes sont toujours là
+- assertVisible:
+    text: "Alice Martin"
+- assertVisible:
+    text: "Bob Dupont"

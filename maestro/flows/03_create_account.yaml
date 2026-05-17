@@ -1,0 +1,76 @@
+# ─────────────────────────────────────────────────────────────
+# 03_create_account.yaml
+# Scénario : créer un nouveau compte
+# ─────────────────────────────────────────────────────────────
+appId: com.example.account_manager
+env:
+  EMAIL: ${TEST_EMAIL}
+  PASSWORD: ${TEST_PASSWORD}
+---
+
+- launchApp
+- waitForAnimationToEnd
+
+# ── 1. Login ──────────────────────────────────────────────────
+- tapOn:
+    id: "email_field"
+- inputText: ${EMAIL}
+- tapOn:
+    id: "password_field"
+- inputText: ${PASSWORD}
+- tapOn:
+    id: "login_button"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "accounts_list"
+
+# ── 2. Ouvrir le formulaire de création ───────────────────────
+- tapOn:
+    id: "add_account_button"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "name_field"
+- assertVisible:
+    id: "create_email_field"
+- assertVisible:
+    id: "create_button"
+
+# ── 3. Remplir le formulaire ──────────────────────────────────
+- tapOn:
+    id: "name_field"
+- inputText: "Test Maestro"
+
+- tapOn:
+    id: "create_email_field"
+- inputText: "test.maestro@example.com"
+
+# Laisser le rôle par défaut (Utilisateur)
+
+# ── 4. Soumettre ──────────────────────────────────────────────
+- tapOn:
+    id: "create_button"
+- waitForAnimationToEnd
+
+# ── 5. Vérifier que le compte apparaît dans la liste ──────────
+- assertVisible:
+    id: "accounts_list"
+- assertVisible:
+    text: "Test Maestro"
+- assertVisible:
+    text: "test.maestro@example.com"
+
+# ── 6. Cas d'erreur : champs vides ────────────────────────────
+- tapOn:
+    id: "add_account_button"
+- waitForAnimationToEnd
+- tapOn:
+    id: "create_button"
+- assertVisible:
+    id: "create_error"
+
+# Annuler
+- tapOn:
+    id: "cancel_button"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "accounts_list"

@@ -1,0 +1,99 @@
+# ─────────────────────────────────────────────────────────────
+# 06_full_flow.yaml
+# Scénario complet : login → créer → toggle → supprimer → logout
+# ─────────────────────────────────────────────────────────────
+appId: com.example.account_manager
+env:
+  EMAIL: ${TEST_EMAIL}
+  PASSWORD: ${TEST_PASSWORD}
+---
+
+- launchApp
+- waitForAnimationToEnd
+
+# ════════════════════════════════════════════════
+# ÉTAPE 1 : Connexion
+# ════════════════════════════════════════════════
+- assertVisible:
+    id: "email_field"
+- tapOn:
+    id: "email_field"
+- inputText: ${EMAIL}
+- tapOn:
+    id: "password_field"
+- inputText: ${PASSWORD}
+- tapOn:
+    id: "login_button"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "accounts_list"
+
+# ════════════════════════════════════════════════
+# ÉTAPE 2 : Créer un nouveau compte
+# ════════════════════════════════════════════════
+- tapOn:
+    id: "add_account_button"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "name_field"
+
+- tapOn:
+    id: "name_field"
+- inputText: "Nouveau Utilisateur"
+
+- tapOn:
+    id: "create_email_field"
+- inputText: "nouveau@example.com"
+
+- tapOn:
+    id: "create_button"
+- waitForAnimationToEnd
+
+# Vérifier que le compte apparaît
+- assertVisible:
+    text: "Nouveau Utilisateur"
+
+# ════════════════════════════════════════════════
+# ÉTAPE 3 : Désactiver Bob (acc_2)
+# ════════════════════════════════════════════════
+- assertVisible:
+    id: "account_item_acc_2"
+- tapOn:
+    id: "toggle_button_acc_2"
+- waitForAnimationToEnd
+
+# ════════════════════════════════════════════════
+# ÉTAPE 4 : Réactiver Bob
+# ════════════════════════════════════════════════
+- tapOn:
+    id: "toggle_button_acc_2"
+- waitForAnimationToEnd
+
+# ════════════════════════════════════════════════
+# ÉTAPE 5 : Supprimer Claire (acc_3)
+# ════════════════════════════════════════════════
+- tapOn:
+    id: "delete_button_acc_3"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "delete_confirm_button"
+- tapOn:
+    id: "delete_confirm_button"
+- waitForAnimationToEnd
+- assertNotVisible:
+    text: "Claire Bernard"
+
+# ════════════════════════════════════════════════
+# ÉTAPE 6 : Déconnexion
+# ════════════════════════════════════════════════
+- tapOn:
+    id: "logout_button"
+- waitForAnimationToEnd
+
+# Vérifier qu'on est revenu sur le login
+- assertVisible:
+    id: "email_field"
+- assertVisible:
+    id: "login_button"
+- assertNotVisible:
+    id: "accounts_list"

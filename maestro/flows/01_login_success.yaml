@@ -1,0 +1,39 @@
+# ─────────────────────────────────────────────────────────────
+# 01_login_success.yaml
+# Scénario : connexion avec des credentials valides
+# ─────────────────────────────────────────────────────────────
+appId: com.example.account_manager   # ← remplacer par ton bundle ID
+env:
+  EMAIL: ${TEST_EMAIL}               # passé via -e ou CI secrets
+  PASSWORD: ${TEST_PASSWORD}
+---
+
+# Lancer l'app proprement
+- launchApp
+- waitForAnimationToEnd
+
+# Vérifier qu'on est sur le login
+- assertVisible:
+    id: "email_field"
+- assertVisible:
+    id: "login_button"
+
+# Saisir les credentials
+- tapOn:
+    id: "email_field"
+- inputText: ${EMAIL}
+
+- tapOn:
+    id: "password_field"
+- inputText: ${PASSWORD}
+
+# Se connecter
+- tapOn:
+    id: "login_button"
+- waitForAnimationToEnd
+
+# Vérifier qu'on est bien sur la liste des comptes
+- assertVisible:
+    id: "accounts_list"
+- assertNotVisible:
+    id: "login_error"

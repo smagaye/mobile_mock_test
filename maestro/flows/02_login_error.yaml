@@ -1,0 +1,39 @@
+# ─────────────────────────────────────────────────────────────
+# 02_login_error.yaml
+# Scénario : connexion avec des credentials invalides
+# ─────────────────────────────────────────────────────────────
+appId: com.example.account_manager
+---
+
+- launchApp
+- waitForAnimationToEnd
+
+- assertVisible:
+    id: "email_field"
+
+# Saisir de mauvais credentials
+- tapOn:
+    id: "email_field"
+- inputText: "mauvais@test.com"
+
+- tapOn:
+    id: "password_field"
+- inputText: "MauvaisMotDePasse"
+
+- tapOn:
+    id: "login_button"
+- waitForAnimationToEnd
+
+# Vérifier que le message d'erreur est visible
+- assertVisible:
+    id: "login_error"
+
+# Vérifier qu'on n'est PAS passé sur la liste des comptes
+- assertNotVisible:
+    id: "accounts_list"
+
+# Vérifier qu'on peut toujours saisir (champs toujours présents)
+- assertVisible:
+    id: "email_field"
+- assertVisible:
+    id: "login_button"

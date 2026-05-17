@@ -1,0 +1,63 @@
+# ─────────────────────────────────────────────────────────────
+# 04_toggle_account.yaml
+# Scénario : désactiver puis réactiver un compte
+# ─────────────────────────────────────────────────────────────
+appId: com.example.account_manager
+env:
+  EMAIL: ${TEST_EMAIL}
+  PASSWORD: ${TEST_PASSWORD}
+---
+
+- launchApp
+- waitForAnimationToEnd
+
+# ── 1. Login ──────────────────────────────────────────────────
+- tapOn:
+    id: "email_field"
+- inputText: ${EMAIL}
+- tapOn:
+    id: "password_field"
+- inputText: ${PASSWORD}
+- tapOn:
+    id: "login_button"
+- waitForAnimationToEnd
+- assertVisible:
+    id: "accounts_list"
+
+# ── 2. Vérifier que Alice est active au départ ────────────────
+- assertVisible:
+    id: "account_item_acc_1"
+- assertVisible:
+    id: "account_status_acc_1"
+- assertVisible:
+    text: "Actif"
+
+# ── 3. Désactiver le compte de Alice (acc_1) ──────────────────
+- tapOn:
+    id: "toggle_button_acc_1"
+- waitForAnimationToEnd
+
+# Vérifier que le statut est passé à Inactif
+- assertVisible:
+    text: "Inactif"
+
+# ── 4. Réactiver le compte ────────────────────────────────────
+- tapOn:
+    id: "toggle_button_acc_1"
+- waitForAnimationToEnd
+
+# Vérifier que le statut est repassé à Actif
+- assertVisible:
+    text: "Actif"
+
+# ── 5. Vérifier qu'on peut toggler un compte déjà inactif ─────
+# Claire (acc_3) est inactive par défaut dans le mock
+- assertVisible:
+    id: "toggle_button_acc_3"
+- tapOn:
+    id: "toggle_button_acc_3"
+- waitForAnimationToEnd
+
+# Doit maintenant être active
+- assertVisible:
+    id: "account_status_acc_3"
