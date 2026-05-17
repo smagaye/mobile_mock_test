@@ -8,7 +8,9 @@ env:
   PASSWORD: ${TEST_PASSWORD}
 ---
 
+- stopApp
 - launchApp
+- clearState
 - waitForAnimationToEnd
 
 # ── 1. Login ──────────────────────────────────────────────────
