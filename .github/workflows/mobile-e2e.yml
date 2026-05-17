@@ -1,8 +1,5 @@
 name: E2E Tests
 
-# ─────────────────────────────────────────────
-# Déclenché sur push main et toutes les PR
-# ─────────────────────────────────────────────
 on:
   push:
     branches: [main]
@@ -12,7 +9,7 @@ on:
 jobs:
   e2e-android:
     runs-on: ubuntu-latest
-    timeout-minutes: 45      # évite les runs bloqués indéfiniment
+    timeout-minutes: 45
 
     steps:
 
@@ -20,7 +17,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. Java (requis par Android SDK) ────
+      # ── 2. Java ─────────────────────────────
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
@@ -33,13 +30,11 @@ jobs:
         with:
           flutter-version: '3.19.0'
           channel: stable
-          cache: true                  # cache Flutter entre les runs
+          cache: true
 
-      # ── 4. Cache AVD (system image ~1.5 Go) ─
-      # Évite de retélécharger l'image Android à chaque run
+      # ── 4. Cache AVD ────────────────────────
       - name: Cache Android AVD
         uses: actions/cache@v4
-        id: avd-cache
         with:
           path: |
             ~/.android/avd/*
@@ -50,7 +45,6 @@ jobs:
       # ── 5. Cache Maestro ────────────────────
       - name: Cache Maestro
         uses: actions/cache@v4
-        id: maestro-cache
         with:
           path: ~/.maestro
           key: maestro-1.40.0
@@ -64,21 +58,32 @@ jobs:
           fi
           echo "$HOME/.maestro/bin" >> $GITHUB_PATH
 
-      # ── 7. Flutter dependencies ─────────────
+      # ── 7. Dependencies ─────────────────────
       - name: Flutter pub get
         run: flutter pub get
 
-      # ── 8. Build APK debug ──────────────────
+      # ── 8. Fix AGP compileSdk 35 ────────────
+      - name: Fix Android Gradle Plugin version
+        run: |
+          sed -i \
+            "s/com.android.tools.build:gradle:[0-9.]*/com.android.tools.build:gradle:8.3.0/" \
+            android/build.gradle
+          sed -i \
+            "s|gradle-[0-9.]*-bin.zip|gradle-8.4-bin.zip|" \
+            android/gradle/wrapper/gradle-wrapper.properties
+          echo "AGP fix ✓"
+
+      # ── 9. Build APK ────────────────────────
       - name: Build APK
         run: flutter build apk --debug
 
-      # ── 9. Vérifier que l'APK existe ────────
-      - name: Check APK exists
+      # ── 10. Vérifier l'APK ──────────────────
+      - name: Check APK
         run: |
           ls -lh build/app/outputs/flutter-apk/app-debug.apk
           echo "APK OK ✓"
 
-      # ── 10. Émulateur + Tests ───────────────
+      # ── 11. Émulateur + Tests ───────────────
       - name: Run E2E Tests
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -103,17 +108,57 @@ jobs:
             set -e
 
             echo "════════════════════════════════"
-            echo "  Attente du boot émulateur"
+            echo "  Fix device offline"
             echo "════════════════════════════════"
 
-            adb wait-for-device
+            # Redémarrer le serveur adb proprement
+            # Règle le "device offline" dès le départ
+            adb kill-server
+            sleep 2
+            adb start-server
+            sleep 3
 
-            until [ "$(adb shell getprop sys.boot_completed 2>/dev/null)" = "1" ]; do
-              echo "  Boot en cours..."
+            echo "════════════════════════════════"
+            echo "  Attente device online"
+            echo "════════════════════════════════"
+
+            # Attendre que le device passe de offline → online
+            # adb wait-for-device seul ne suffit pas (reste offline)
+            TIMEOUT=120
+            ELAPSED=0
+            until adb devices | grep -w "device" | grep -v "List" | grep -v "offline"; do
+              if [ $ELAPSED -ge $TIMEOUT ]; then
+                echo "Timeout — device toujours offline après ${TIMEOUT}s"
+                adb devices
+                exit 1
+              fi
+              echo "  Device offline, attente... (${ELAPSED}s)"
               sleep 3
+              ELAPSED=$((ELAPSED + 3))
             done
 
-            until [ "$(adb shell getprop init.svc.bootanim 2>/dev/null)" = "stopped" ]; do
+            echo "Device online ✓"
+            adb devices
+
+            echo "════════════════════════════════"
+            echo "  Attente boot complet"
+            echo "════════════════════════════════"
+
+            # Attendre sys.boot_completed maintenant que le device est online
+            TIMEOUT=180
+            ELAPSED=0
+            until [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; do
+              if [ $ELAPSED -ge $TIMEOUT ]; then
+                echo "Timeout — boot pas terminé après ${TIMEOUT}s"
+                exit 1
+              fi
+              echo "  Boot en cours... (${ELAPSED}s)"
+              sleep 5
+              ELAPSED=$((ELAPSED + 5))
+            done
+
+            # Attendre la fin des animations de démarrage
+            until [ "$(adb shell getprop init.svc.bootanim 2>/dev/null | tr -d '\r')" = "stopped" ]; do
               echo "  Animations en cours..."
               sleep 2
             done
@@ -125,11 +170,11 @@ jobs:
             adb shell settings put global transition_animation_scale 0
             adb shell settings put global animator_duration_scale 0
 
-            # Laisser le GPU renderer s'initialiser
+            # GPU renderer init
             sleep 10
 
             echo "════════════════════════════════"
-            echo "  Installation de l'APK"
+            echo "  Installation APK"
             echo "════════════════════════════════"
 
             adb install -r build/app/outputs/flutter-apk/app-debug.apk
@@ -151,14 +196,12 @@ jobs:
 
             mkdir -p results/videos results/screenshots
 
-            # Vidéo flow complet
             ~/.maestro/bin/maestro record --local \
               --output results/videos/full_flow.mp4 \
-              maestro/flows/06_full_flow.yaml \
+              maestro/flows/ \
               -e TEST_EMAIL="${{ secrets.TEST_EMAIL }}" \
               -e TEST_PASSWORD="${{ secrets.TEST_PASSWORD }}"
 
-            # Tous les tests + rapport HTML
             ~/.maestro/bin/maestro test maestro/flows/ \
               -e TEST_EMAIL="${{ secrets.TEST_EMAIL }}" \
               -e TEST_PASSWORD="${{ secrets.TEST_PASSWORD }}" \
@@ -168,7 +211,7 @@ jobs:
 
             echo "Tests terminés ✓"
 
-      # ── 11. Upload artefacts ────────────────
+      # ── 12. Upload artefacts ─────────────────
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
