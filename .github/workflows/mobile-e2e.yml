@@ -6,6 +6,41 @@ on:
   pull_request:
     branches: [main]
 
+# ─────────────────────────────────────────────
+# Global variables — edit here, not in steps
+# ─────────────────────────────────────────────
+env:
+  # Flutter
+  FLUTTER_VERSION: '3.19.0'
+
+  # Maestro
+  MAESTRO_VERSION: '2.5.1'
+
+  # Android emulator
+  ANDROID_API_LEVEL: '33'
+  ANDROID_ARCH: 'x86_64'
+  ANDROID_TARGET: 'google_apis'
+  ANDROID_PROFILE: 'pixel_6'
+  ANDROID_AVD_NAME: 'Pixel_6_API33'
+  ANDROID_RAM: '4096M'
+  ANDROID_HEAP: '512M'
+  ANDROID_CORES: '2'
+
+  # App
+  APP_PACKAGE: 'com.example.account_manager'
+  APK_PATH: 'build/app/outputs/flutter-apk/app-debug.apk'
+
+  # Paths
+  FLOWS_DIR: 'maestro/flows'
+  RESULTS_DIR: 'results'
+  VIDEOS_DIR: 'results/videos'
+  SCREENSHOTS_DIR: 'results/screenshots'
+  REPORT_FILE: 'results/report.html'
+  SCRIPT_PATH: 'scripts/run_e2e.sh'
+
+  # Artifact retention (days)
+  ARTIFACT_RETENTION: '14'
+
 jobs:
   e2e-android:
     runs-on: ubuntu-latest
@@ -17,8 +52,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # ── 2. KVM ──────────────────────────────
-      # Sans KVM l'émulateur est trop lent → device offline
+      # ── 2. KVM hardware acceleration ────────
+      # Without KVM the emulator runs in software mode
+      # → too slow to boot → device offline error
       - name: Enable KVM
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' \
@@ -34,14 +70,15 @@ jobs:
           distribution: 'temurin'
 
       # ── 4. Flutter ──────────────────────────
-      - name: Setup Flutter
+      - name: Setup Flutter ${{ env.FLUTTER_VERSION }}
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.19.0'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
           cache: true
 
-      # ── 5. Cache AVD ────────────────────────
+      # ── 5. Cache Android AVD (~1.5 GB) ──────
+      # Avoids re-downloading the Android system image on every run
       - name: Cache Android AVD
         uses: actions/cache@v4
         with:
@@ -49,30 +86,32 @@ jobs:
             ~/.android/avd/*
             ~/.android/adb*
             /usr/local/lib/android/sdk/system-images
-          key: avd-api33-${{ runner.os }}-x86_64-v1
+          key: avd-api${{ env.ANDROID_API_LEVEL }}-${{ runner.os }}-${{ env.ANDROID_ARCH }}-v1
 
       # ── 6. Cache Maestro ────────────────────
-      - name: Cache Maestro
+      - name: Cache Maestro ${{ env.MAESTRO_VERSION }}
         uses: actions/cache@v4
         with:
           path: ~/.maestro
-          key: maestro-1.40.0
+          key: maestro-${{ env.MAESTRO_VERSION }}-${{ runner.os }}
 
-      # ── 7. Installer Maestro ────────────────
-      - name: Install Maestro
+      # ── 7. Install Maestro ──────────────────
+      - name: Install Maestro ${{ env.MAESTRO_VERSION }}
         run: |
           if ! command -v maestro &> /dev/null; then
-            export MAESTRO_VERSION=1.40.0
-            curl -Ls "https://get.maestro.mobile.dev" | bash
+            curl -Ls "https://get.maestro.mobile.dev" \
+              | MAESTRO_VERSION=${{ env.MAESTRO_VERSION }} bash
           fi
           echo "$HOME/.maestro/bin" >> $GITHUB_PATH
+          maestro --version
 
-      # ── 8. Dependencies ─────────────────────
+      # ── 8. Flutter dependencies ─────────────
       - name: Flutter pub get
         run: flutter pub get
 
-      # ── 9. Fix AGP compileSdk 35 ────────────
-      - name: Fix Android Gradle Plugin
+      # ── 9. Fix AGP for compileSdk 35 ────────
+      # compileSdk 35 requires AGP 8.1.0+
+      - name: Fix Android Gradle Plugin version
         run: |
           sed -i \
             "s/com.android.tools.build:gradle:[0-9.]*/com.android.tools.build:gradle:8.3.0/" \
@@ -81,32 +120,41 @@ jobs:
             "s|gradle-[0-9.]*-bin.zip|gradle-8.4-bin.zip|" \
             android/gradle/wrapper/gradle-wrapper.properties
 
-      # ── 10. Build APK ───────────────────────
+      # ── 10. Build debug APK ─────────────────
       - name: Build APK
         run: flutter build apk --debug
 
-      # ── 11. Vérifier APK ────────────────────
-      - name: Check APK
-        run: ls -lh build/app/outputs/flutter-apk/app-debug.apk
+      # ── 11. Verify APK ──────────────────────
+      - name: Verify APK
+        run: |
+          ls -lh ${{ env.APK_PATH }}
+          echo "APK ready ✓"
 
-      # ── 12. Émulateur + Tests ───────────────
-      # Le script est dans un fichier .sh — évite les
-      # erreurs de parsing multilignes avec /usr/bin/sh
+      # ── 12. Run emulator + E2E tests ────────
+      # Script is in an external .sh file to avoid
+      # multiline parsing errors with /usr/bin/sh
       - name: Run E2E Tests
         uses: reactivecircus/android-emulator-runner@v2
         env:
           TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
           TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
+          APP_PACKAGE: ${{ env.APP_PACKAGE }}
+          APK_PATH: ${{ env.APK_PATH }}
+          FLOWS_DIR: ${{ env.FLOWS_DIR }}
+          RESULTS_DIR: ${{ env.RESULTS_DIR }}
+          VIDEOS_DIR: ${{ env.VIDEOS_DIR }}
+          SCREENSHOTS_DIR: ${{ env.SCREENSHOTS_DIR }}
+          REPORT_FILE: ${{ env.REPORT_FILE }}
         with:
-          api-level: 33
-          arch: x86_64
-          target: google_apis
-          profile: pixel_6
-          avd-name: Pixel_6_API33
+          api-level: ${{ env.ANDROID_API_LEVEL }}
+          arch: ${{ env.ANDROID_ARCH }}
+          target: ${{ env.ANDROID_TARGET }}
+          profile: ${{ env.ANDROID_PROFILE }}
+          avd-name: ${{ env.ANDROID_AVD_NAME }}
           force-avd-creation: false
-          cores: 2
-          ram-size: 4096M
-          heap-size: 512M
+          cores: ${{ env.ANDROID_CORES }}
+          ram-size: ${{ env.ANDROID_RAM }}
+          heap-size: ${{ env.ANDROID_HEAP }}
           emulator-options: >
             -no-window
             -no-audio
@@ -115,13 +163,14 @@ jobs:
             -gpu swiftshader_indirect
             -accel on
           disable-animations: true
-          script: bash scripts/run_e2e.sh
+          script: bash ${{ env.SCRIPT_PATH }}
 
-      # ── 13. Upload artefacts ─────────────────
+      # ── 13. Upload artifacts ─────────────────
+      # if: always() = upload even if tests fail
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: e2e-results-${{ github.run_number }}
-          path: results/
-          retention-days: 14
+          path: ${{ env.RESULTS_DIR }}
+          retention-days: ${{ env.ARTIFACT_RETENTION }}
